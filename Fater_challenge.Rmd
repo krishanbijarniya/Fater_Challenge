@@ -1,0 +1,1159 @@
+---
+title: "Project_Fater"
+author: "Team Navy"
+date: "2024-03-07"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+#Technical Report:
+Estimating Store Potential for Diaper Sales in Naples Province
+
+#Introduction:
+The retail industry faces the challenge of estimating store potential for diaper sales in the Naples province. This challenge is rooted in the need for targeted marketing strategies to optimize product placement and promotional efforts. Given the limited availability of resources, there is a pressing need for a strategic approach to enhance store performance and capitalize on untapped market potential.
+
+#Case Study Overview:
+This case study involves a comprehensive analysis of various factors influencing diaper sales across retail outlets in Naples. Key factors include socio-demographic data, territorial features, and points of interest near stores. Understanding these factors is crucial for developing effective marketing strategies and optimizing sales potential.
+
+#Challenges:
+Utilizing Socio-Demographic Data: How can socio-demographic data help predict diaper sales in different areas of Naples? Identifying demographic factors that correlate with diaper demand enables targeted marketing efforts.
+
+What territorial features indicate high store potential for diaper sales? Examining geographic location and area characteristics guides the selection of stores for focused marketing campaigns.
+
+How do nearby facilities and services affect store potential for diaper sales? Understanding consumer behavior influenced by nearby amenities helps optimize store strategies.
+
+Which predictive models and analytical tools accurately estimate store potential for diaper sales? Developing reliable forecasting methods informs marketing and inventory management decisions.
+
+#Dataset Overview:
+To address these questions, we analyze data from various sources:
+
+Dictionary.xlsx: Contains metadata explaining variables and data types across other files, ensuring consistency in data interpretation.
+
+Gravitation_NA.csv: Quantifies store attractiveness based on factors like proximity to key points of interest, guiding identification of stores with high sales potential.
+
+Shapes_NA.csv: Provides spatial data for geographic analysis, including store locations and polygons for mapping.
+
+Socio_Demo_NA.csv: Offers socio-demographic insights into the local population, crucial for estimating diaper demand.
+
+Stores_NA.csv: Details store attributes and operational metrics, aiding identification of stores with sales improvement potential.
+
+
+## Libraries:
+
+library(dplyr): This library loads the 'dplyr' package, which provides a set of functions for data manipulation and transformation. It is widely used for tasks such as filtering, selecting, mutating, and summarizing data.
+
+library(ggplot2): This library loads the 'ggplot2' package, which is a powerful and flexible plotting system in R. It allows users to create complex and customized plots using a grammar of graphics approach.
+
+library(sf): This line loads the 'sf' package, which provides functions and classes for working with spatial data structures. It is commonly used for geographic information system (GIS) tasks.
+
+library(leaflet): This library loads the 'leaflet' package, which provides interactive maps in R. It allows users to create dynamic and interactive maps that can be displayed in web browsers.
+
+library(plotly): This library loads the 'plotly' package, which provides interactive plots in R. It allows users to create and customize interactive visualizations that can be easily shared and embedded in web applications.
+
+library(cluster): This library loads the 'cluster' package, which provides functions for clustering analysis. It includes methods for performing k-means clustering, hierarchical clustering, and other clustering techniques.
+
+library(hrbrthemes): This library loads the 'hrbrthemes' package, which provides additional themes and styling options for ggplot2 plots. It offers a variety of pre-designed themes for creating visually appealing plots.
+
+library(rpart): This library loads the 'rpart' package, which provides functions for fitting and visualizing classification and regression trees (CART). It is commonly used for decision tree-based modeling tasks.
+
+library(data.table): This library loads the 'data.table' package, which provides an extension of data frames in R with additional features for fast and efficient data manipulation. It is particularly useful for working with large datasets.
+
+library(caTools): This library loads the 'caTools' package, which provides functions for data splitting and other utility functions commonly used in machine learning tasks. It includes functions such as sample.split() for creating training and testing datasets.
+
+library(glmnet): This library loads the 'glmnet' package, whichi s a versatile tool for fitting regularized regression models and is commonly used in various fields such as statistics, machine learning, and data science for tasks like prediction, feature selection, and model regularization.
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(leaflet)
+library(plotly)
+library(cluster)
+library(hrbrthemes)
+library(rpart)
+library(data.table)
+library(caTools)
+library(FactoMineR)
+library(rpart)
+library(rpart.plot)
+library(corrplot)
+library(rpart.plot)
+library(caret)
+library(glmnet)
+
+```
+
+# Data Pre-Processing:
+
+To read the polygon CSV file, we utilize the st_read() function from the sf package. This function allows us to read the file named "shapes_NA.csv", which likely contains information about geographic regions represented as polygons. Upon reading, the data is stored in a data frame named "polygons_data".
+
+Subsequently, we read the stores CSV file using the read.csv() function. This file, named "stores_NA.csv", likely contains information about store locations, including latitude, longitude, store ID, store name, and potential. The data from this file is stored in a data frame named "stores_data".
+
+These steps are crucial for accessing and preparing the necessary spatial and store-related data for further analysis and visualization in our project report.
+
+
+```{r}
+stores_polygon <- st_read("C:/Users/giann/Downloads/shapes_NA.csv")
+str(stores_polygon)
+
+stores_data <- read.csv("C:/Users/giann/Downloads/stores_NA (2).csv")
+str(stores_data)
+```
+
+
+#Data Integration:
+Merging the table and assigning microcode to the store data. The provided code snippet facilitates the assignment of microcodes to store locations. Here's a breakdown of its functionality:
+Initializing the microcode column: Initially, a new column called "microcode" is appended to the existing stores_data dataframe, with each entry initialized to NA.
+
+Iterating through each store: Using a for loop, the code traverses through each row of the stores_data dataframe. For every store, it creates a point geometry representing the store's location and subsequently checks if this point falls within any polygon defined in the polygons_sf spatial object.
+
+Assigning microcodes based on spatial relationship: If a store's location lies within a polygon, the corresponding microcode from the polygons_data dataframe is retrieved and assigned to the store's "microcode" column. This assignment is done based on the first matching polygon index.
+
+Writing the updated data to a CSV file: Finally, the modified stores_data dataframe, now including the assigned microcodes, is written to a CSV file named "result.csv" using the write.csv() function. The argument row.names = FALSE ensures that row indices are excluded from the output file.
+
+In essence, this code orchestrates a spatial join operation, associating each store with a microcode based on its geographic location relative to predefined polygons. The resultant "result.csv" file encapsulates the original store data enriched with the corresponding microcode assignments.
+
+```{r}
+polygons_sf <- st_as_sf(stores_polygon, wkt = "geometry", crs = st_crs(stores_data))
+stores_data$microcode <- NA
+
+for (i in seq_len(nrow(stores_data))) {
+  store_point <- st_point(c(stores_data$Long[i], stores_data$Lat[i]))
+  
+  polygon_stores <- st_within(store_point, polygons_sf)
+  
+  if (length(polygon_stores) > 0) {
+    indices <- unlist(polygon_stores)
+    chosen_index <- indices[1]
+    stores_data$microcode[i] <- stores_polygon$microcode[chosen_index]
+  }
+}
+
+write.csv(stores_data, "result.csv", row.names = FALSE)
+```
+
+
+Reading CSV Files: We begin by importing the necessary data from CSV files: Socio-demographic Data: The data from the CSV file named 'socio_demo_NA.csv' is read and stored in the dataframe socio_demo. Gravitation Data: Information from the CSV file 'gravitation_NA.csv' is read and stored in the dataframe gravitation_data. Store Microcode Data: Data from the CSV file 'result.csv' is read and stored in the dataframe store_mcode.
+
+Merging Data Frames: The next step involves merging these datasets to create a unified dataset:
+
+socioDemo_storeMcode <- store_mcode %>% left_join(socio_demo, by = "microcode")
+
+Here, the left_join() function from the dplyr package is utilized to merge the store_mcode and socio_demo data frames based on a common column, "microcode".
+
+A left join is employed, ensuring that all records from the store_mcode dataframe are retained. Matching rows from the socio_demo dataframe are added to store_mcode based on the values in the "microcode" column.
+
+The resulting socioDemo_storeMcode dataset is stored in the dataframe store_mcode. This data integration process enables the consolidation of socio-demographic information with store microcode data, facilitating comprehensive analysis or modeling that may necessitate combined insights from both datasets.
+
+
+```{r}
+socio_demo <- read.csv('socio_demo_NA.csv')
+gravitation_data <- read.csv('gravitation_NA.csv')
+store_mcode <- read.csv('result.csv')
+str(socio_demo)
+str(gravitation_data)
+socioDemo_storeMcode <- store_mcode %>%
+  left_join(socio_demo, by = "microcode")
+```
+
+
+# Data Cleaning:
+
+Variable Reduction: To streamline the dataset and concentrate the analysis on pertinent variables, unnecessary variables were removed. This process aids in simplifying the dataset and enhances the focus on essential factors for analysis.
+
+Handling Missing Values: Rows containing missing values were eliminated to ensure that the analysis is conducted on complete and reliable data. This approach mitigates the risk of biases or inaccuracies stemming from incomplete data, thereby bolstering the robustness of subsequent analyses.
+
+
+```{r}
+socioDemo_storeMcode <- subset(socioDemo_storeMcode, select = -c(Lat, Long, Provincia, province, region))
+sum(is.na(socioDemo_storeMcode))
+socioDemo_storeMcode <- na.omit(socioDemo_storeMcode)
+```
+
+# Exploratory Data Analysis:
+
+Visualizing Store Distribution and Potential on Interactive Maps Utilizing the Leaflet approach, an interactive map was generated to visually represent store locations and their corresponding potential. The map displays circle markers representing individual stores, allowing for intuitive exploration of their spatial distribution.
+
+By clicking on markers, we can access additional information about each store, facilitating in-depth analysis and decision-making processes. These interactive visualizations offer valuable insights into the geographical distribution of stores and their potential, serving as a powerful tool for exploratory data analysis.
+
+
+
+```{r}
+quartiles <- quantile(stores_data$Potenziale, probs = c(0, 0.25, 0.5, 0.75, 1))
+color_palette <- colorQuantile(palette = c("red", "orange", "yellow", "green"), domain = stores_data$Potenziale, n = 4)
+leaflet(stores_data) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~Long,
+    lat = ~Lat,
+    popup = ~paste("Store ID: ", Cod3HD, Insegna, MQVEND, Parking, "<br> Potenziale: ", Potenziale),
+    color = ~color_palette(Potenziale)
+  )
+```
+
+#Box plots:
+
+Box plots are particularly useful for visualizing the distribution and central tendency of numerical data, making them well-suited for exploratory data analysis and identifying patterns or outliers within the data.
+
+The following code dynamically generates interactive box plots for each specified column in the socioDemo_storeMcode dataset:
+
+It utilizes the plot_ly() function from the plotly package, enabling the creation of interactive visualizations.
+
+Each box plot represents the distribution of values in a specific column, providing insights into the variability and central tendency of the data.
+
+Outliers, quartiles, and median values are visually represented within each box plot, aiding in the interpretation of the data distribution.
+
+By employing a loop, the code ensures that a box plot is generated for each column specified in ColNames, facilitating comprehensive exploration of multiple variables.
+
+The interactive features of the plots allow us to go deeper into the data by interacting with data points, zooming in or out, and panning across the visualization, enhancing the analytical capabilities of the visualizations.
+
+
+```{r}
+cols <- c("population", "Potenziale", "MQVEND")
+plots <- lapply(cols, function(col) {
+  plot_ly(data = socioDemo_storeMcode, 
+          type = "box",
+          x = ~get(col),
+          name = col,
+          marker = list(color = "black"),
+          line = list(color = "red")) %>%
+    layout(xaxis = list(title = col))
+})
+
+subplot(plots, nrows = 3)
+```
+
+
+From the box plot, it's clear that there are numerous outliers in the 'Potenziale' variable.
+
+These outliers have the potential to significantly impact our analysis and should be carefully considered in our further investigations."
+
+
+
+
+#Density plot:
+
+Density plots are a useful tool in data analysis for visualizing the distribution of a continuous variable. It gain insights into the data before performing more advanced analyses. They provide an intuitive identifying patterns, skewness, multimodality and outlier detection that can guide further investigation and hypothesis generation.
+
+This code dynamically generates interactive density plots for each specified column in the dataset.
+
+Utilizing ggplotly(), each static ggplot object is transformed into an interactive plotly object, empowering users to explore the density plots interactively. They can hover over data points for detailed information, zoom in or out, and pan across the plot seamlessly.
+
+Through visualizing the distribution of each variable, we can enhance our understanding of the data and make well-informed decisions during the exploratory data analysis process.
+
+```{r}
+Col <- "Potenziale"
+
+ggplotly(ggplot(socioDemo_storeMcode, aes_string(x = Col)) +
+    geom_density() +
+    theme_minimal() +
+    labs(title = paste("Density Plot of", Col),
+         x = Col,
+         y = "Density") +
+    scale_fill_brewer(palette = "Pastel1"))
+  
+```
+
+The analysis of the graph indicates that the examined columns exhibit negative skewness. Negative skewness refers to the asymmetry in the distribution of data where the tail of the distribution extends towards the lower end of the range of values.
+
+
+
+
+#Removing Outliers:
+
+Removing outliers is done to improve the accuracy, normalize
+distributions and reliability of statistical analyses. Outliers, which
+are data points that significantly deviate from the rest of the data,
+can skew results and distort the interpretation of findings.
+
+The code utilizes the Interquartile Range (IQR) method to identify and
+remove outliers from the "Potenziale" variable in the dataset.
+
+Outliers are identified as values that fall outside the range defined by
+1.5 times the IQR above the third quartile (Q3) and below the first
+quartile (Q1).
+
+After executing this code, the dataset will retain only those rows where
+the "Potenziale" values fall within the specified outlier bounds,
+effectively eliminating outliers from the dataset.
+
+This process helps ensure that subsequent analyses and modeling efforts
+are based on a more robust and representative dataset, free from the
+influence of extreme values that could potentially skew results.
+
+```{r}
+outlier_threshold <- 1.5
+iqr_value <- IQR(socioDemo_storeMcode$Potenziale)
+
+print(quantile(socioDemo_storeMcode$Potenziale)[2] - outlier_threshold * iqr_value)
+print(quantile(socioDemo_storeMcode$Potenziale)[4] + outlier_threshold * iqr_value)
+# Filter out rows with values outside the range (1.5 times IQR)
+socioDemo_storeMcode <- socioDemo_storeMcode %>%
+  filter(between(Potenziale, quantile(Potenziale)[2] - outlier_threshold * iqr_value, quantile(Potenziale)[4] + outlier_threshold * iqr_value))
+
+
+```
+
+#Box plot after removing outliers
+
+```{r}
+cols <- c("population", "Potenziale", "MQVEND")
+plots <- lapply(cols, function(col) {
+  plot_ly(data = socioDemo_storeMcode, 
+          type = "box",
+          x = ~get(col),
+          name = col,
+          marker = list(color = "black"),
+          line = list(color = "red")) %>%
+    layout(xaxis = list(title = col))
+})
+
+subplot(plots, nrows = 3)
+
+```
+
+The box plot visualization indicates that after removing outliers, the distribution of the data appears to be more compact, with fewer extreme values compared to before. This suggests that the dataset is now less influenced by extreme observations, making it safer to proceed with further analysis.
+
+
+#Density plot after removing outliers
+
+```{r}
+
+ggplotly(ggplot(socioDemo_storeMcode, aes_string(x = Col)) +
+    geom_density() +
+    theme_minimal() +
+    labs(title = paste("Density Plot of", Col),
+         x = Col,
+         y = "Density") +
+    scale_fill_brewer(palette = "Pastel1"))
+
+```
+
+The density plot visualization indicates that after removing outliers, the distribution of the data appears to be more concentrated around the central tendency, with fewer extreme values compared to before. This suggests that the dataset is now less influenced by outliers, making it safer to proceed with further analysis.
+
+
+#Correlation heatmap
+
+A correlation heatmap is a visual representation of the correlation matrix, which displays the pairwise correlations between variables in a dataset. Each cell in the heatmap represents the correlation coefficient between two variables, typically ranging from -1 to 1.
+
+
+
+
+```{r}
+
+numeric_data <- socioDemo_storeMcode[, sapply(socioDemo_storeMcode, is.numeric)]
+numeric_data$microcode <- NULL
+numeric_data$Cod3HD <- NULL
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+corrplot(cor_matrix, method="color", 
+         tl.col="black", tl.srt=45, 
+         tl.cex=0.6, 
+         cl.cex=0.6, 
+         number.cex=0.7, 
+         addCoef.col = "black", 
+         order="hclust", 
+         diag=FALSE)
+
+```
+Based on the analysis conducted through the heatmap and pair graph, it is evident that there is no significant relationship between the variable "Potenziale" and any other variable, except for the size of the store (MQVEND) column, which exhibits the highest correlation.
+
+
+
+#CORRELATION BETWEEN MQVEND AND POTENZIALE
+
+```{r}
+
+socioDemo_storeMcode$PotenzialeQuartile <- cut(socioDemo_storeMcode$Potenziale, 
+                                               breaks = quantile(socioDemo_storeMcode$Potenziale, probs = seq(0, 1, 0.25)),
+                                               labels = c("4° Quartile", "3° Quartile", "2° Quartile", "1° Quartile"),
+                                               include.lowest = TRUE)
+
+scatter_plot <- ggplot(socioDemo_storeMcode, aes(x = Potenziale, y = MQVEND, colour = PotenzialeQuartile)) +
+  geom_point() +
+  labs(title = "Scatter Plot of Potenziale vs. MQVEND",
+       x = "Potenziale",
+       y = "MQVEND",
+       colour = "Potenziale Quartile")
+
+plot <- ggplotly(scatter_plot)
+plot
+
+```
+
+The scatter plot illustrates a notable correlation between MQVEND and Potenziale variables, suggesting a potential relationship between store size and sales potential.
+
+
+#Comparision between Male and Female Population
+
+This code dynamically calculates the sum of male and female populations for each area (Comune) in the socioDemo_storeMcode dataframe. It then generates an interactive visualization to explore and compare the distribution of male and female populations across different areas, facilitating dynamic analysis and comparison of population demographics.
+
+```{r}
+
+grouped_data2 <- socioDemo_storeMcode %>%
+  group_by(Comune)
+
+summary_data2 <- grouped_data2 %>%
+  summarise(
+    Male = sum(population_m),
+    Female = sum(population_f)
+  )
+
+df_long <- summary_data2 %>%
+  tidyr::pivot_longer(cols = c(Male, Female), names_to = "Gender", values_to = "Population")
+
+p <- ggplot(df_long, aes(x = Comune, y = Population, fill = Gender)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(title = "Male-Female Population",
+       x = "Comune",
+       y = "Population",
+       fill = "Gender") +
+  scale_fill_manual(values = c("black", "yellow"),
+                    name = "Gender") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1.2 ,size=6))
+
+p <- ggplotly(p)
+p
+```
+
+The comparison aimed to identify areas where gender-based differences might impact the market. However, the analysis revealed that across most areas, the numbers of men and women are similar.
+
+
+#Comparision of Potential and Average People Population
+
+This code generates an interactive scatter plot showcasing the
+relationship between the population and Potenziale variables in the
+socioDemo_storeMcode dataframe. 
+
+```{r}
+average_population <- socioDemo_storeMcode %>%
+  summarise(AveragePopulation = mean(population))
+p <- ggplot(socioDemo_storeMcode, aes(x = population, y = Potenziale)) +
+  geom_point(color = "black", alpha = 0.5, size = 3) +
+  theme_minimal() +
+  labs(
+    title = "Relation between Potenziale and Average People Population",
+    x = "Average People Population",
+    y = "Potenziale"
+  ) +
+  scale_x_continuous(limits = c(0, 1000), breaks = seq(0, 1000, by = 100)) +
+  scale_y_continuous(limits = c(0, 0.03), breaks = seq(0, 0.03, by = 0.01))
+
+ggplotly(p)
+
+```
+
+This code generates an interactive scatter plot showcasing the relationship between the population and Potenziale variables in the socioDemo_storeMcode dataframe.
+
+
+#Mean Population visiting store by time-slot and day-wise
+
+```{r}
+so_st_gData <- socioDemo_storeMcode %>% left_join(gravitation_data, by="microcode")
+socio_gravit_store_data<-na.omit(so_st_gData)
+so_st_gData<-socio_gravit_store_data
+
+```
+
+
+
+```{r}
+
+boxplot(log(media_annuale) ~ daytype, data = so_st_gData,
+        main = "Boxplot of Log(Media Annuale) by Daytype",
+        xlab = "Daytype",
+        ylab = "Log(Media Annuale)",
+        col = c("skyblue", "lightgreen") 
+)
+
+boxplot(log(media_annuale) ~ fasciaoraria, data = so_st_gData,
+        main = "Boxplot of Log(Media Annuale) by Day Hour",
+        xlab = "Day Hour",
+        ylab = "Log(Media Annuale)",
+        col = rainbow(length(unique(so_st_gData$fasciaoraria))) 
+)
+
+
+```
+
+We have observed that population visiting the store on daily-hourly basis has similar mean. Also population visiting stores on weekends and weekdays also has similar mean. From our analysis we can say that there is no peak hour or day when people visit the store more frequently.
+
+```{r}
+kw_result <- kruskal.test(log(media_annuale) ~ fasciaoraria, data = so_st_gData)
+print(kw_result)
+kruskal.test(log(media_annuale) ~ daytype, data = so_st_gData)
+
+
+```
+
+
+
+#Average Store Potential by Store Category
+
+This code computes the average potential (Potenziale) for each store category (TipologiaPdV) in the socioDemo_storeMcode dataframe and subsequently generates an interactive bar plot using ggplotly(). Piechart shows the average store potential by category and distribution of store types.
+
+```{r}
+
+average_potential <- socioDemo_storeMcode %>%
+  group_by(TipologiaPdV) %>%
+  summarise(AveragePotential = mean(Potenziale))
+
+ggplotly(ggplot(average_potential, aes(x = TipologiaPdV, y = AveragePotential, fill = TipologiaPdV)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Average Store Potential by Category",
+       x = "Category",
+       y = "Average Potential") +
+  scale_fill_brewer(palette = "Pastel0"))
+
+total_potential <- sum(average_potential$AveragePotential)
+average_potential <- average_potential %>%
+  mutate(Percentage = (AveragePotential / total_potential) * 100)
+
+pie_chart <- ggplot(average_potential, aes(x = "", y = AveragePotential, fill = TipologiaPdV)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), position = position_stack(vjust = 0.5)) +  # 
+  coord_polar("y", start = 0) +
+  theme_void() +
+  scale_fill_brewer(palette = "Pastel1") +
+  labs(title = "Average Store Potential by Category")
+print(pie_chart)
+
+store_type_counts <- table(socioDemo_storeMcode$TipologiaPdV)
+percentages <- round(100 * store_type_counts / sum(store_type_counts), 1)
+
+labels <- paste(names(store_type_counts), ": ", store_type_counts, " (", percentages, "%)", sep="")
+pie(store_type_counts, 
+    main = "Distribution of Store Types",
+    labels = labels,
+    col = rainbow(length(store_type_counts))
+    )
+```
+According to the graph, the majority of potential stores belong to the supermarket category, followed by drugstores in second place, discount centers, and finally Libero Servizio. Based on the pie chart, it's evident that LIS comprises the highest percentage at 58.4%, followed by SUP at 21.9%, SSD at 11.3%, and DIS at 8.5%, respectively.
+
+
+#Average Store potential by Comune
+
+This code snippet computes the average potential (Potenziale) for each area (Comune) in the socioDemo_storeMcode dataframe and subsequently generates an interactive bar plot using ggplotly().
+
+```{r}
+
+average_potential <- socioDemo_storeMcode %>%
+  group_by(Comune) %>%
+  summarise(AveragePotential = mean(Potenziale))
+
+average_potential$Comune <- factor(average_potential$Comune, 
+                                    levels = average_potential$Comune[order(average_potential$AveragePotential)])
+
+plot <- ggplot(average_potential, aes(x = Comune, y = AveragePotential, fill = AveragePotential)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "blue", high = "red") +  # Gradient fill color
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6)) +
+  labs(title = "Average Store Potential by Area",
+       x = "Comune",
+       y = "Average Potential")
+
+plotly_plot <- ggplotly(plot)
+plotly_plot
+
+```
+
+From the histogram we can identify the Comune with highest and lowest average potential.
+
+#Parking Availability of stores
+
+```{r}
+
+parking_counts <- socioDemo_storeMcode %>% 
+  count(Parking)
+coustom_colors=c("red","green")
+library(plotly)
+pie_chart <- plot_ly(parking_counts, labels = ~Parking, values = ~n, type = "pie",marker = list(colors = coustom_colors)) %>%
+  layout(title = "Distribution of Parking Availability",
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+pie_chart
+
+
+```
+
+
+#Map with Parking
+
+
+```{r}
+
+stores_data$Parking <- factor(stores_data$Parking)
+color_palette <- colorFactor(
+  palette = c("red", "green"),  
+  domain = levels(stores_data$Parking)
+)
+leaflet(stores_data) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~Long,
+    lat = ~Lat,
+    popup = ~paste("Store ID: ", Cod3HD, Insegna, MQVEND, Parking, "<br> Potenziale: ", Potenziale),
+    color = ~color_palette(Parking)
+  )
+
+
+```
+
+
+#Average Store Potential by Parking
+
+The interactive bar plot vividly illustrates the average store potential across parking categories, delineating the variations in potential among locations with and without parking facilities.
+
+```{r}
+average_potential <- socioDemo_storeMcode %>%
+  group_by(Parking) %>%
+  summarise(AveragePotential = mean(Potenziale))
+
+ggplotly(ggplot(average_potential, aes(x = Parking, y = AveragePotential, fill = Parking)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Average Store Potential by Parking",
+       x = "Parking",
+       y = "Average Potential") +
+```
+
+Based on the analysis of average store potential by area, it is evident that comune Pollena Trocchia has the highest average store potential of 0.016 as compared to other areas. This suggests that the comune presents a significant opportunity for retail businesses, indicating a favorable market environment for store development and expansion efforts. Understanding the factors contributing to the high potential in the area, such as population demographics, economic indicators, and geographic location, can provide valuable insights for strategic decision-making in retail operations and marketing initiatives.
+
+
+
+
+
+#Average potential of store by name of the store
+
+This code generates an interactive bar plot that visualizes the average potential of the all the stores. By doing so, it offers insight into the variability of potential among different stores, allowing for a comparative analysis of store performance.
+
+```{r}
+
+average_potential <- socioDemo_storeMcode %>%
+group_by(Insegna) %>%
+summarise(AveragePotential = mean(Potenziale))
+
+average_potential <- average_potential %>%
+arrange(desc(AveragePotential)) %>%
+mutate(Rank = rank(desc(AveragePotential)))
+
+plot <- ggplot(head(average_potential, 80), aes(x = Insegna, y = AveragePotential, fill = Rank)) +
+geom_bar(stat = "identity") +
+scale_fill_gradient(low = "green", high = "red") + # Color scale based on rank
+theme_light() +
+theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+labs(title = "Store-Wise Average Store Potential",
+x = "Store Name",
+y = "Average Potential")
+ggplotly(plot)
+
+```
+
+LIDL stores demonstrate the highest average potential overall, as indicated by their average potential compared to other stores in the dataset.
+
+
+
+
+#K-means Clustering 
+
+The K-means clustering process begins by setting a seed for reproducibility, ensuring consistent results across different runs.
+
+Next, the data undergoes preprocessing, which involves standardizing the numerical features. Additionally, the Parking variable is converted to numeric format, while store_name, area_code, and store_type_num are transformed into factors and then integers.
+
+Determining the optimal number of clusters involves iterating over a range of cluster numbers (from 2 to 20) and computing silhouette scores for each clustering. The silhouette score measures the similarity of an object to its own cluster compared to other clusters. The number of clusters with the highest silhouette score is selected as the optimal number of clusters.
+
+Finally, K-means clustering is performed using the previously determined optimal number of clusters. The resulting cluster assignments are stored in the cluster column of the merged_data dataframe.
+
+
+
+
+
+
+
+
+#Average potential by cluster
+
+This code generates an interactive bar plot showcasing the average store potential for each cluster. It enables users to visually explore the variations in store potential across different clusters.
+
+To achieve this, we first computed the average store potential (Potenziale) for each cluster by grouping the data based on the cluster variable and calculating the mean Potenziale within each group. The results were stored in a new dataframe named average_potential.
+
+Subsequently, we converted the cluster column in the average_potential dataframe to a character type. This conversion is beneficial when dealing with categorical variables, ensuring proper plotting.
+
+Overall, the interactive bar plot facilitates insights into the average store potential distribution across various clusters identified through K-means clustering, thereby enabling interactive exploration and analysis of potential patterns.
+
+
+
+
+```{r}
+set.seed(123)
+ 
+# Filter the dataset to include only instances with parking available
+socioDemo_storeMcode_with_parking <- socioDemo_storeMcode[socioDemo_storeMcode$Parking == "True", ]
+ 
+# Select the variables you want to include in the clustering model
+selected_vars <- c("Potenziale", "MQVEND")
+ 
+# Standardize the selected variables
+df_standardized <- scale(socioDemo_storeMcode_with_parking[, selected_vars])
+ 
+# Initialize an empty vector to store silhouette scores
+silhouette_scores <- numeric(5)
+ 
+# Loop through different numbers of clusters
+for (i in 1:6) {
+  # Fit k-means model with 'i' clusters
+  kmeans_model <- kmeans(df_standardized, centers = i)
+  # Calculate silhouette score for the clustering
+  silhouette_scores[i] <- silhouette(kmeans_model$cluster, dist(df_standardized))
+}
+ 
+# Choose the number of clusters based on silhouette scores
+num_clusters <- which.max(silhouette_scores)
+print(num_clusters)
+ 
+# Fit the final k-means model with the chosen number of clusters
+kmeans_result <- kmeans(df_standardized, centers = num_clusters)
+ 
+# Assign cluster labels to the filtered dataset
+socioDemo_storeMcode_with_parking$cluster <- kmeans_result$cluster
+ 
+# Generate a frequency table of cluster labels
+table(socioDemo_storeMcode_with_parking$cluster)
+```
+
+
+```{r}
+```{r}
+cluster_counts <- c( 67,  45,  76,  56,  10, 131  )
+clusters <- 1:6
+
+plot(clusters, cluster_counts, 
+     main = "Clustering Dots Model",
+     xlab = "Cluster", ylab = "Number of Data Points",
+     pch = 19, col = "blue",
+     xlim = c(0, 15), ylim = c(0, max(cluster_counts) + 10),
+     xaxt = "n", yaxt = "n")  # Suppress x and y axes labels
+
+axis(1, at = clusters, labels = clusters)
+axis(2, las = 1) 
+
+grid()
+
+legend("topright", legend = "Cluster Counts", pch = 19, col = "blue", bty = "n")
+
+```
+
+
+```{r}
+average_potential <- socioDemo_storeMcode_with_parking %>%
+  group_by(cluster) %>%
+  summarise(AveragePotential = mean(Potenziale, na.rm = TRUE)) %>%
+  arrange(desc(AveragePotential)) %>%
+  mutate(Rank = rank(desc(AveragePotential)))
+
+# Plotting the average potential by cluster using ggplot2
+plot <- ggplot(average_potential, aes(x = factor(cluster), y = AveragePotential, fill = factor(cluster))) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste("Rank:", Rank), y = AveragePotential + 0.02), vjust = 0) +
+  scale_fill_brewer(palette = "Set3") +
+  labs(title = "Average Potential by Cluster", x = "Cluster", y = "Average Potential") +
+  theme_minimal()
+
+# Convert ggplot to plotly for an interactive plot
+plotly_plot <- ggplotly(plot)
+
+# If running this code in an interactive R session, you can display the plotly plot directly
+plotly_plot
+```
+
+
+```{r}
+set.seed(123)
+socioDemo_storeMcode_with_parking <- socioDemo_storeMcode[socioDemo_storeMcode$Parking == "false", ]
+socioDemo_storeMcode$store_type_num <- as.integer(as.factor(socioDemo_storeMcode$TipologiaPdV))
+selected_vars <- c("Potenziale", "MQVEND","Parking")
+ 
+df_standardized <- scale(socioDemo_storeMcode[, c("Potenziale")])
+ 
+ 
+silhouette_scores <- numeric(4)
+for (i in 1:4) {
+  kmeans_model <- kmeans(df_standardized, centers = i)
+  silhouette_scores[i] <- silhouette(kmeans_model$cluster, dist(df_standardized))
+}
+num_clusters <- 3
+print(num_clusters)
+kmeans_result <- kmeans(df_standardized, centers = num_clusters)
+socioDemo_storeMcode$cluster <- kmeans_result$cluster
+table(socioDemo_storeMcode$cluster)
+```
+
+
+The output above suggests that each cluster exhibits different potential levels. This variation indicates that the cluster variable can serve as a useful feature for distinguishing potential.
+
+
+#Average store potential by cluster
+
+```{r}
+df_standardized_n <- scale(socioDemo_storeMcode[, c("Potenziale")])
+
+silhouette_scores <- numeric(15)
+for (i in 2:15) {
+  kmeans_model <- kmeans(df_standardized, centers = i)
+  silhouette_scores[i] <- silhouette(kmeans_model$cluster, dist(df_standardized))
+}
+num_clusters <- which.max(silhouette_scores)
+
+print(num_clusters)
+
+kmeans_result <- kmeans(df_standardized, centers = num_clusters)
+socioDemo_storeMcode$cluster_potential <- kmeans_result$cluster
+table(socioDemo_storeMcode$cluster_potential)
+
+average_potential <- socioDemo_storeMcode %>%
+  group_by(cluster_potential) %>%
+  summarise(AveragePotential = mean(Potenziale))
+
+average_potential$cluster_potential <- as.character(average_potential$cluster_potential)
+
+color_palette <- rainbow(length(unique(average_potential$cluster_potential)))
+
+plotly_plot <- ggplotly(
+  ggplot(average_potential, aes(x = cluster_potential, y = AveragePotential, fill = cluster_potential)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    scale_fill_manual(values = color_palette) +  
+    theme_minimal() +
+    labs(title = "Average Store Potential by Cluster",
+         x = "Store type cluster",
+         y = "Average Potential")
+)
+
+plotly_plot
+
+```
+
+
+
+# Feature Selection
+
+Selecting only the columns that are considered features (excluding columns Cod3HD, Insegna, and store_name) from the socioDemo_storeMcode dataframe.
+
+Convert Data to Data Table: Then converted the df_filtered dataframe to a data table format using the data.table library. Define Target Variable: opm = "Potenziale": This assigns the name of the target variable (the variable to be predicted) to the variable opm. In this case, the target variable is named "Potenziale".
+
+Loop Through Columns for Feature Engineering: This loop iterates over each column in the dataframe to perform feature engineering. columnname <- colnames(df_tbl[,..i]): This line retrieves the name of the current column being processed. Inside the loop: The number of unique values in each column is counted and stored in dummycount using df_tbl[, dummycount:=.N, by=columnname]. If the current column is not the target variable (opm), and the count of unique values (dummycount) is greater than 80, the column values are kept; otherwise, they are replaced with "smalls". This process effectively removes columns with too few unique values, potentially eliminating irrelevant or noisy features.
+
+Filter Variables for Model Building: varcounts <- as.data.table(apply(df_tbl, 2, function(w) length(unique(w)))): This calculates the count of unique values for each column in the dataframe. vars <- varcounts[(colname==opm(V1<100 & V1>1)) & colname != "dummycount", colname]: This selects columns where the count of unique values is between 2 and 100, or where the column is the target variable (opm).
+
+Prepare Data for Modeling: callgroup_training_data = df_tbl %>% select (-opm): This selects all columns except the target variable (opm) for model training. Missing values in the dataset are checked and handled (though this part is commented out).
+
+Build a Classification Model: important_vars <- rpart (opm ~., data = x, method="class"): This builds a classification model using the rpart algorithm (method="class") with the target variable (opm) predicted by all other variables in the dataset.
+
+View Variable Importance: View(important_vars\$variable.importance): This displays the variable importance scores calculated by the classification model, indicating the importance of each feature in predicting the target variable.
+
+Overall, the performed feature engineering, filters variables for model building, prepares the data for modeling, builds a classification model, and examines the importance of features in predicting the target variable.
+
+```{r}
+
+df_filtered <- socioDemo_storeMcode %>% select(-Cod3HD, -Insegna, -store_name, -Potenziale) 
+str(df_filtered)
+df_tbl = data.table(df_filtered)
+opm = "cluster"
+nc<-ncol (df_filtered)
+
+nc
+
+for (i in 1:nc){
+  columnname<-colnames(df_tbl[,..i])
+  if (columnname!=opm){
+    df_tbl[, dummycount:=.N, by=columnname]
+    df_tbl[,eval(columnname):= ifelse(dummycount>35, get(..columnname), "smalls")]
+  }
+}
+
+varcounts <- as.data.table(apply(df_tbl, 2, function(w) length(unique(w))))
+varcounts[, colname:=colnames (df_tbl)]
+vars<-varcounts[(colname==opm|(V1<100 & V1>1)) & colname != "dummycount", colname] 
+df_tbl<-df_tbl[,..vars]
+callgroup_training_data = df_tbl %>% select (-opm) 
+#callgroup_training_data[is.na(callgroup_training_data)] <- 0
+#length(is.na(x$Insegna))
+sum(is.na(callgroup_training_data))
+x = callgroup_training_data
+x$opm = df_tbl$cluster_potential
+
+
+```
+
+The final output concludes that store_type and cluster are important features for creating decision tree. Hence, they are used for building random forest tree.
+
+
+
+#Hypothesis testing
+
+```{r}
+
+result <- chisq.test(df_filtered$cluster, df_filtered$MQVEND)
+print(result)
+
+result <- chisq.test(df_filtered$cluster, df_filtered$area_code)
+print(result)
+
+result <- chisq.test(df_filtered$cluster, df_filtered$population)
+print(result)
+```
+Cluster vs. Potenziale:
+
+The Chi-squared test comparing the variables cluster_potential and Potenziale resulted in a Chi-squared value of 9056.1 with 228 degrees of freedom. This suggests a significant association between the potential clusters identified and the clusters formed based on other criteria.
+
+Cluster  vs. Store_type:
+
+The Chi-squared test comparing cluster_potential and TipologiaPdV resulted in a Chi-squared value of 1979.6 with 36 degrees of freedom. This indicates a significant association between the potential clusters and the types of stores, suggesting that store potential varies across different store types.
+
+Cluster  vs. Area Code:
+
+The Chi-squared test comparing cluster_potential and area_code resulted in a Chi-squared value of 2357.9 with 1008 degrees of freedom. This implies a significant association between the potential clusters and the geographical areas represented by area codes, indicating regional variations in store potential.
+
+The statistically significant results of the Pearson's Chi-squared tests provide strong evidence that the potential clusters identified exhibit significant associations with other variables such as store types and geographical areas. This suggests that store potential is not randomly distributed but is influenced by factors such as store type and geographic location. Further analysis and exploration of these associations can provide valuable insights for strategic decision-making in retail management and marketing efforts.
+
+
+
+## Local regression:
+Categorical variables "TipologiaPdV" and "Parking" are transformed into numeric factors for compatibility with the regression model. The "population" variable is converted to numeric format to ensure consistency in data types. The dataset is divided into training and testing subsets using the sample.split() function from the caTools library to enable model evaluation.
+
+Model Training: A multiple local regression model is trained on the training dataset, with "Potenziale" as the dependent variable and "TipologiaPdV_cat", "Parking_cat", "MQVEND", and "area_code" as the independent variables.
+The R-squared value, indicating the proportion of variance in the dependent variable explained by the independent variables, is reported to evaluate the overall goodness-of-fit of the model.
+
+In summary, the data is prepared for analysis through preprocessing steps, followed by the training and evaluation of a local regression model, with results presented to assess its performance and predictive accuracy.
+
+
+
+```{r}
+
+socioDemo_storeMcode_with_parking$TipologiaPdV_cat = as.numeric(as.factor(socioDemo_storeMcode_with_parking$TipologiaPdV))
+set.seed(123)
+split = sample.split(socioDemo_storeMcode_with_parking$Potenziale, SplitRatio = 0.8)
+training_set = subset(socioDemo_storeMcode_with_parking, split == TRUE)
+test_set = subset(socioDemo_storeMcode_with_parking, split == FALSE)
+
+loess_model <- loess(Potenziale ~ TipologiaPdV_cat + 
+                       MQVEND +population ,span=1, data = test_set)
+predictions <- predict(loess_model, newdata = test_set)
+r_squared <- 1 - sum((test_set$Potenziale - predictions)^2) / sum((test_set$Potenziale - mean(test_set$Potenziale))^2)
+print(paste("R-squared:", round(r_squared, 4)))
+
+
+mse <- mean((test_set$Potenziale - predictions)^2)
+print(paste("MSE:", round(mse, 4)))
+
+# Calcolo dell'RMSE
+rmse <- sqrt(mse)
+print(paste("RMSE:", round(rmse, 4)))
+
+# Calcolo dell'MAE
+mae <- mean(abs(test_set$Potenziale - predictions))
+print(paste("MAE:", round(mae, 4)))
+
+ggplot(data = test_set, aes(x = Potenziale, y = predictions)) +
+  geom_point(color = "blue", alpha = 0.5) +  # Scatter plot of actual vs. predicted
+  geom_smooth(method = "loess", se = FALSE, color = "red") +  # Local regression line
+  labs(title = "Local Regression Plot",
+       x = "Actual Potenziale",
+       y = "Predicted Potenziale")
+
+
+
+```
+The R-squared value of 0.4416 for local regression indicates that approximately 44.16% of the variance in the response variable (Potenziale) can be explained by the predictors (MQVEND, TipologiaPdV_cat, Parking_cat, and area_code) included in the model.
+
+
+```{r}
+# Conversione della variabile 'TipologiaPdV' in numerica
+socioDemo_storeMcode$TipologiaPdV_cat <- as.numeric(as.factor(socioDemo_storeMcode$TipologiaPdV))
+
+# Conversione della variabile 'Parking' in numerica (0 per FALSE, 1 per TRUE)
+socioDemo_storeMcode$Parking_cat <- as.numeric(as.factor(socioDemo_storeMcode$Parking))
+
+# Assicurati che 'MQVEND' sia trattato come numerico se necessario
+# socioDemo_storeMcode$MQVEND <- as.numeric(as.factor(socioDemo_storeMcode$MQVEND))
+
+# Filtraggio per includere solo le righe dove Parking è FALSE (0 dopo la conversione in numerico)
+socioDemo_storeMcode_filtered <- socioDemo_storeMcode[socioDemo_storeMcode$Parking_cat == 0, ]
+
+# Divisione del dataset filtrato in training set e test set
+set.seed(123)
+split = sample.split(newdf4$Potenziale, SplitRatio = 0.8)
+training_set = subset(newdf4, split == TRUE)
+test_set = subset(newdf4, split == FALSE)
+
+# Costruzione del modello loess sul training set
+loess_model <- loess(Potenziale ~  MQVEND + population, span=1, data = training_set)
+
+# Predizione sul test set
+predictions <- predict(loess_model, newdata = test_set)
+
+
+# Calcolo delle metriche di performance
+r_squared <- 1 - sum((test_set$Potenziale - predictions)^2) / sum((test_set$Potenziale - mean(test_set$Potenziale))^2)
+print(paste("R-squared:", round(r_squared, 4)))
+
+mse <- mean((test_set$Potenziale - predictions)^2)
+print(paste("MSE:", round(mse, 4)))
+
+rmse <- sqrt(mse)
+print(paste("RMSE:", round(rmse, 4)))
+
+mae <- mean(abs(test_set$Potenziale - predictions))
+print(paste("MAE:", round(mae, 4)))
+
+# Visualizzazione dei risultati con ggplot2
+ggplot(data = test_set, aes(x = Potenziale, y = predictions)) +
+  geom_point(color = "blue", alpha = 0.5) +
+  geom_smooth(method = "loess", se = FALSE, color = "red") +
+  labs(title = "Local Regression Plot",
+       x = "Actual Potenziale",
+       y = "Predicted Potenziale")
+
+```
+
+
+
+
+#Decision Tree
+
+
+```{r}
+
+set.seed(123)
+ 
+socioDemo_storeMcode_with_parking$TipologiaPdV_cat <- as.factor(socioDemo_storeMcode_with_parking$TipologiaPdV)
+socioDemo_storeMcode_with_parking$Parking_cat <- as.numeric(as.factor(socioDemo_storeMcode_with_parking$Parking))
+
+split <- sample.split(socioDemo_storeMcode_with_parking$Potenziale, SplitRatio = 0.8)
+training_set <- subset(socioDemo_storeMcode_with_parking, split == TRUE)
+test_set <- subset(socioDemo_storeMcode_with_parking, split == FALSE)
+ 
+dt_model <- rpart(cluster ~  TipologiaPdV   + population, data = training_set, method = "class")
+rpart_model <- rpart(cluster ~ population+TipologiaPdV, data = training_set, method = "class")
+
+
+ 
+predictions <- predict(dt_model, newdata = test_set, type = "class")
+ 
+confusion_matrix <- table(predictions, test_set$cluster)
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
+ 
+library(rpart.plot)
+rpart.plot(dt_model, box.palette = "RdBu", shadow.col = "gray", nn = TRUE)
+ 
+
+```
+
+By interpreting the decision tree structure with of accuracy of 52.30 %, we can understand how the model makes predictions based on the values of the predictor variables. The root node is split based on the predictor variable that results in the best separation of the target variable cluster_potential.The splits in the tree determine the path an observation takes from the root node to a leaf node, where the final prediction is made based on the majority class of the observations in that leaf node.
+
+
+
+#Random Forest Model
+
+```{r}
+set.seed(123)
+ 
+df1<-socioDemo_storeMcode_with_parking%>%select(c("TipologiaPdV","cluster","population"))
+str(df1)
+df1$cluster<-factor(df$cluster)
+df1$store_type_num<-factor(df$TipologiaPdV)
+split = sample.split(df1$cluster, SplitRatio = 0.75)
+training_set = subset(df1, split == TRUE)
+test_set = subset(df1, split == FALSE)
+ 
+library(randomForest)
+rf_model <- randomForest(cluster ~ population+store_type_num, data = training_set,mtry=2, ntree = 1000)
+predictions <- predict(rf_model, newdata = test_set)
+confusion_matrix <- table(predictions, test_set$cluster)
+ 
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+precision <- diag(confusion_matrix) / colSums(confusion_matrix)
+recall <- diag(confusion_matrix) / rowSums(confusion_matrix)
+f1_score <- 2 * (precision * recall) / (precision + recall)
+print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
+
+importance(rf_model)
+varImpPlot(rf_model)
+print(rf_model)
+
+# O specificamente per l'errore OOB
+rf_model$err.rate
+
+print("Precision:")
+print(precision)
+print("Recall:")
+print(recall)
+print("F1-score:")
+print(f1_score)
+ 
+
+```
+
+
+
+The Random Forest model achieved a relatively moderate accuracy of 44.21 %, indicating its effectiveness in predicting the 'cluster_potential' variable based on the given predictor variables.
+The high accuracy suggests that the selected predictor variables ("TipologiaPdV_cat","area_code","cluster","cluster_potential", "Parking", "MQVEND" and "population") contain useful information for predicting the 'cluster_potential' categories.
+
+
+
+
+
+```{r}
+library(rpart)
+library(rpart.plot)
+
+# Imposta i parametri per evitare il pruning e mantenere tutte le variabili
+control_params <- rpart.control(cp = 0, minsplit = 1, xval = 0,maxdepth =4)
+
+# Addestra il modello di albero di decisione senza pruning
+dt_model <- rpart(cluster ~ TipologiaPdV + Parking + population, 
+                  data = training_set, 
+                  method = "class",
+                  control = control_params)
+
+# Disegna l'albero di decisione mostrando tutte le variabili e le statistiche
+rpart.plot(dt_model, type = 4, extra = 106)
+predictions <- predict(rf_model, newdata = test_set)
+confusion_matrix <- table(predictions, test_set$cluster)
+
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+# Visualizza l'importanza delle variabili
+
+
+```
+
+
+#Conclusion:
+
+Parking Availability: The presence of ample parking facilities near the store positively influences its potential. Stores with convenient parking options is 33.9% with average potential more than 0.080 as compared to stores with no parking consisting of 66.1% with average potential of less than 0.050. 
+
+Store Type: Supermarket which consists of 21.9% of the stores has the highest potential of 38.4% as compared to Libero Servizio which consists the highest percentage of 58.4% and has the potential of 11.8%. 
+
+Store Name: The name or brand of the store can also play a crucial role in determining its potential. Well-established and reputable store names like LIDL often enjoy higher customer trust and loyalty, leading to increased foot traffic and sales.
+
+Population Cluster in Area: The demographic composition and density of the population surrounding the store location significantly impact its potential. Stores situated in areas with a dense and diverse population cluster tend to have a larger customer base and higher sales potential compared to those in less populated or homogeneous areas. Also people visiting stores in weekdays or weekends on any specific time-slot doesnot impact the average store potential. So area wise promotion may attract more potential customers. 
+
+Store Size: The size of the store premises is another important factor affecting its potential. Higher MQVEND shows high potential as compared to smaller MQVEND. Larger stores typically have more space for displaying products, accommodating customers, and offering a wider range of services. This can attract more customers and lead to higher sales volume.
+
+To maximize the potential of a store, it is essential to consider factors such as parking availability, store name or brand reputation, the demographic profile of the surrounding population, and the size of the store premises. Retailer can focus more marketing strategies and promotions on diapers to the LIS stores to attract more potential customers. As LIS stores are high in number, an increase in sales will eventually increase the overall  revenue potential. By addressing these factors strategically, retailers can optimize their store performance and enhance overall profitability.
+
+
+
+
+
+
